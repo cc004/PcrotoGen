@@ -15,6 +15,7 @@ namespace PcrotoGen
             "Elements.ClanDefine/eClanSupportMemberType",
             "Elements.eGachaDrawType",
             "Elements.eSkillLocationCategory",
+            "Elements.CampaignData/eCampaignCategory"
         };
 
         private static Protocol ResolveProtocol(Dictionary<string, string> url, List<ApiCall> apis, ModuleDefinition def)
@@ -273,12 +274,12 @@ namespace PcrotoGen
 
             using var sw = new StreamWriter(File.OpenWrite("enums.py"));
 
-            sw.WriteLine("from enum import Enum");
+            sw.WriteLine("from enum import IntEnum");
             sw.WriteLine();
 
             foreach (var type in protocol.enums)
             {
-                sw.WriteLine($"class {type.name}(Enum):");
+                sw.WriteLine($"class {type.name}(IntEnum):");
                 foreach (var constant in type.values)
                 {
                     sw.WriteLine($"    {constant.Key} = {constant.Value}");
