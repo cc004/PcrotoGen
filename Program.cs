@@ -1,6 +1,8 @@
 ﻿using System.Reflection;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -148,30 +150,90 @@ namespace PcrotoGen
             return result;
         }
 
+        private static List<ApiCall> ReadApiCallIl2Cpp(ModuleDefinition definition)
+        {
+            var apiMgr = definition.GetType("Elements.ApiManager");
+            var result = new List<ApiCall>();
+            var added = new HashSet<string>();
+
+            foreach (var method in apiMgr.Methods.OrderBy(m => m.Name))
+            {
+                if (!method.Name.StartsWith("Add") || !method.Name.EndsWith("PostParam")) continue;
+
+                if (added.Contains(method.Name)) continue;
+
+                added.Add(method.Name);
+
+                var requestType = definition.GetType("Elements.ApiManager/" + method.Name[3..]);
+                if (requestType == null) continue;
+
+                var respType = method.Parameters.Select(p => p.ParameterType)
+                    .OfType<GenericInstanceType>().SingleOrDefault(p =>
+                        p != null && p.GetElementType().FullName == "System.Action`1");
+                if (respType == null) continue;
+
+                result.Add(new()
+                {
+                    url = method.Name[3..^9],
+                    request = requestType.FullName,
+                    response = respType.GenericArguments[0].FullName
+                });
+            }
+
+            return result;
+        }
+
         private static Regex reg = new ("(^|_)(.)", RegexOptions.Compiled);
 
-        private static Dictionary<string, string> processNameReplacement(ModuleDefinition def)
+        private static IEnumerable<string> extractMonoStrings(ModuleDefinition def)
         {
             return def.Types.SelectMany(t =>
                     t.Methods.Where(m => m.Parameters.Any(p => p.ParameterType.Name == "JsonData")))
                 .Where(m => m.Body != null)
                 .SelectMany(m => m.Body.Instructions.Where(inst => inst.OpCode.Code == Code.Ldstr))
-                .Select(inst => (string) inst.Operand)
-                .Distinct().ToDictionary(val => reg.Replace(val, g => g.Groups[2].Value.ToUpper()), val => val);
+                .Select(inst => (string) inst.Operand);
         }
 
+        private static Dictionary<string, string> processNameReplacement(IEnumerable<string> strings)
+        {
+            return strings.Select(x => x).DistinctBy(x => reg.Replace(x, g => g.Groups[2].Value.ToUpper()))
+                .ToDictionary(val => reg.Replace(val, g => g.Groups[2].Value.ToUpper()), val => val);
+        }
+
+        public struct stringLiteral
+        {
+            public string value { get; set; }
+        }
 
         static void Main(string[] args)
         {
             var mono = AssemblyDefinition.ReadAssembly("Assembly-CSharp_mono.dll")!.MainModule!;
-            var il2 = AssemblyDefinition.ReadAssembly("Assembly-CSharp_il2cpp.dll")!.MainModule!;
+            var il2cpp = AssemblyDefinition.ReadAssembly("Assembly-CSharp_il2cpp.dll")!.MainModule!;
 
             var url = ReadApiUrl(mono);
             var apis = ReadApiCallMono(mono);
+            var apihash = new HashSet<string>(apis.Select(a => a.response));
 
-            ClassType.nameReplacementDict = processNameReplacement(mono);
+            var apis2 = ReadApiCallIl2Cpp(il2cpp).Where(a => !apihash.Contains(a.response)).ToList();
+
+            ClassType.nameReplacementDict = processNameReplacement(extractMonoStrings(mono).Concat(
+                JsonSerializer.Deserialize<stringLiteral[]>(File.ReadAllText("stringliteral.json")).Select(x => x.value)));
 
             var protocol = ResolveProtocol(url, apis, mono);
+
+            var urlil2cpp = new Dictionary<string, string>()
+            {
+                ["EquipEnhanceMax"] = "equipment/enhance_max",
+                ["SeasonPassBuyLevel"] = "season_ticket_new/buy_level",
+                ["SeasonPassIndex"] = "season_ticket_new/index",
+                ["SeasonPassMissionAccept"] = "season_ticket_new/accept",
+                ["SeasonPassRewardAccept"] = "season_ticket_new/reward",
+                ["TestBuyTicket"] = "test/buy_ticket"
+            };
+
+            var protocol2 = ResolveProtocol(urlil2cpp, apis2, il2cpp);
+
+            protocol += protocol2;
 
             SavePythonProtocol(protocol);
         }
