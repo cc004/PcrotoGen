@@ -52,7 +52,7 @@ namespace PcrotoGen
                     Resolve(@ref);
                 api.request = req.name;
                 api.response = resp.name;
-                api.url = url[api.url];
+                api.url = url.TryGetValue(api.url, out var val) ? val : string.Empty;
                 request.Add(req);
                 response.Add(resp);
             }
@@ -214,7 +214,7 @@ namespace PcrotoGen
             var apis = ReadApiCallMono(mono);
             var apihash = new HashSet<string>(apis.Select(a => a.response));
 
-            var apis2 = ReadApiCallIl2Cpp(il2cpp).Where(a => !apihash.Contains(a.response)).ToList();
+            var apis2 = ReadApiCallIl2Cpp(il2cpp); /*.Where(a => !apihash.Contains(a.response)).ToList();*/
 
             ClassType.nameReplacementDict = processNameReplacement(extractMonoStrings(mono).Concat(
                 JsonSerializer.Deserialize<stringLiteral[]>(File.ReadAllText("stringliteral.json")).Select(x => x.value)));
