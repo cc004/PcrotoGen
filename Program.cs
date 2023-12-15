@@ -300,7 +300,7 @@ namespace PcrotoGen
             writeFile(protocol.common,
                 "common.py", 
                 """
-                from typing import List
+                from typing import List, Dict
                 from .enums import *
                 from pydantic import BaseModel, Field
                 """,
@@ -309,7 +309,7 @@ namespace PcrotoGen
             writeFile(protocol.request,
                 "requests.py",
                 """
-                from typing import List
+                from typing import List, Dict
                 from .modelbase import Request
                 from .responses import *
                 from .common import *
@@ -326,7 +326,7 @@ namespace PcrotoGen
             writeFile(protocol.response,
                 "responses.py",
                 """
-                from typing import List
+                from typing import List, Dict
                 from .modelbase import ResponseBase
                 from .common import *
                 from .enums import *

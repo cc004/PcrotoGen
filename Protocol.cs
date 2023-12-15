@@ -35,27 +35,26 @@ public class Protocol(ApiCall[] apis, ClassType[] common, EnumType[] enums, Clas
             {
 
                 toMerge.fields[field.Key] = field.Value;
-                /*
-                if (toMerge.fields.TryGetValue(field.Key, out var fieldType))
-                {
-                    if (fieldType.baseType != field.Value.baseType)
-                    {
-                        var x = field.Value.baseType;
-                        var y = fieldType.baseType;
-                        if (x == "long" && y == "int")
-                            toMerge.fields[field.Key] = field.Value;
-                        else if (x == "int" && y == "long") ;
-                        else
-                            throw new InvalidOperationException("conflict field type");
-                    }
-                }
-                else
-                {
-                    toMerge.fields[field.Key] = field.Value;
-                }*/
             }
         }
 
-        return result.Values.ToArray();
+        static IEnumerable<string> enumerateField(FieldType type)
+        {
+            return type.parameters.SelectMany(enumerateField).Prepend(type.baseType);
+        }
+
+        var resolved = new Dictionary<string, ClassType>();
+
+        foreach (var type in result.Values)
+        {
+            if (resolved.ContainsKey(type.name)) continue;
+
+            foreach (var dependency in type.fields.Values.SelectMany(enumerateField))
+                if (result.TryGetValue(dependency, out var val))
+                    resolved.TryAdd(dependency, val);
+
+            resolved.Add(type.name, type);
+        }
+        return resolved.Values.ToArray();
     }
 }
