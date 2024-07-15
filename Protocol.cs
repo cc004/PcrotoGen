@@ -13,9 +13,31 @@ public class Protocol(ApiCall[] apis, ClassType[] common, EnumType[] enums, Clas
         return new Protocol(
             a.apis.Concat(b.apis).DistinctBy(a => a.request).ToArray(),
             MergeClass(a.common, b.common),
-            a.enums.Concat(b.enums).DistinctBy(t => t.name).ToArray(),
+            MergeEnum(a.enums, b.enums),
             MergeClass(a.response, b.response),
             MergeClass(a.request, b.request));
+    }
+
+    private static EnumType[] MergeEnum(EnumType[] a, EnumType[] b)
+    {
+        var result = a.ToDictionary(c => c.name, c => c);
+
+        foreach (var t in b)
+        {
+            if (!result.ContainsKey(t.name))
+            {
+                result[t.name] = t;
+                continue;
+            }
+
+            var toMerge = result[t.name];
+            foreach (var field in t.values)
+            {
+                toMerge.values[field.Key] = field.Value;
+            }
+        }
+
+        return a;
     }
 
     private static ClassType[] MergeClass(ClassType[] a, ClassType[] b)
