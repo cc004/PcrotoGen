@@ -228,7 +228,8 @@ namespace PcrotoGen
                 ["SeasonPassIndex"] = "season_ticket_new/index",
                 ["SeasonPassMissionAccept"] = "season_ticket_new/accept",
                 ["SeasonPassRewardAccept"] = "season_ticket_new/reward",
-                ["TestBuyTicket"] = "test/buy_ticket"
+                ["TestBuyTicket"] = "test/buy_ticket",
+                ["GachaMonthlyIndex"] = "gacha/resident"
             };
 
             var protocol2 = ResolveProtocol(urlil2cpp, apis2, il2cpp);
