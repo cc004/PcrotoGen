@@ -37,7 +37,7 @@ public class Protocol(ApiCall[] apis, ClassType[] common, EnumType[] enums, Clas
             }
         }
 
-        return a;
+        return result.Values.ToArray();
     }
 
     private static ClassType[] MergeClass(ClassType[] a, ClassType[] b)
