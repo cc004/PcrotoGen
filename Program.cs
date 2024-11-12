@@ -17,7 +17,9 @@ namespace PcrotoGen
             "Elements.ClanDefine/eClanSupportMemberType",
             "Elements.eGachaDrawType",
             "Elements.eSkillLocationCategory",
-            "Elements.CampaignData/eCampaignCategory"
+            "Elements.CampaignData/eCampaignCategory",
+            "Elements.StoryDefine/eStoryVisibleType",
+            "Elements.eParamType",
         };
 
         private static Protocol ResolveProtocol(Dictionary<string, string> url, List<ApiCall> apis, ModuleDefinition def)
@@ -183,7 +185,11 @@ namespace PcrotoGen
             return result;
         }
 
-        private static Regex reg = new ("(^|_)(.)", RegexOptions.Compiled);
+        private static Regex reg = new("(^|_)(.)", RegexOptions.Compiled);
+
+        private static Regex regUrl = new("(^|[_/])(.)", RegexOptions.Compiled);
+
+        private static Regex regAlpha = new("^[a-z0-9_/]*$", RegexOptions.Compiled);
 
         private static IEnumerable<string> extractMonoStrings(ModuleDefinition def)
         {
@@ -216,8 +222,10 @@ namespace PcrotoGen
 
             var apis2 = ReadApiCallIl2Cpp(il2cpp); /*.Where(a => !apihash.Contains(a.response)).ToList();*/
 
+            var stringLiterals = JsonSerializer.Deserialize<stringLiteral[]>(File.ReadAllText("stringliteral.json"));
+
             ClassType.nameReplacementDict = processNameReplacement(extractMonoStrings(mono).Concat(
-                JsonSerializer.Deserialize<stringLiteral[]>(File.ReadAllText("stringliteral.json")).Select(x => x.value)));
+                stringLiterals.Select(x => x.value)));
 
             var protocol = ResolveProtocol(url, apis, mono);
 
@@ -228,9 +236,19 @@ namespace PcrotoGen
                 ["SeasonPassIndex"] = "season_ticket_new/index",
                 ["SeasonPassMissionAccept"] = "season_ticket_new/accept",
                 ["SeasonPassRewardAccept"] = "season_ticket_new/reward",
-                ["TestBuyTicket"] = "test/buy_ticket",
+                // ["TestBuyTicket"] = "test/buy_ticket",
                 ["GachaMonthlyIndex"] = "gacha/resident"
             };
+
+            foreach (var str in stringLiterals)
+            {
+                if (regAlpha.IsMatch(str.value) && str.value.Any(c => c == '/'))
+                {
+                    urlil2cpp.Add(
+                        regUrl.Replace(str.value, m => m.Groups[2].Value.ToUpper()),
+                        str.value);
+                }
+            }
 
             var protocol2 = ResolveProtocol(urlil2cpp, apis2, il2cpp);
 
@@ -270,31 +288,39 @@ namespace PcrotoGen
                     return $"{field.baseType}[{string.Join(", ", field.parameters.Select(fieldToString))}]";
                 }
 
-                using var sw = new StreamWriter(File.OpenWrite(file));
-
-                sw.WriteLine(header);
-                sw.WriteLine();
-
-                foreach (var type in types)
                 {
-                    sw.WriteLine($"class {name(type.name)}({@base(type.name)}):");
-                    foreach (var field in type.fields)
-                    {
-                        if (keywords.Contains(field.Key))
-                        {
-                            sw.WriteLine($"    _{field.Key}: {fieldToString(field.Value)} = Field(alias='{field.Key}')");
-                        }
-                        else
-                            sw.WriteLine($"    {field.Key}: {fieldToString(field.Value)} = None");
-                    }
+                    using var sw = new StreamWriter(File.OpenWrite(file));
 
-                    if (classSuffix != null)
+                    sw.WriteLine(header);
+                    sw.WriteLine();
+
+                    foreach (var type in types)
                     {
-                        sw.WriteLine(classSuffix(type.name));
+                        sw.WriteLine($"class {name(type.name)}({@base(type.name)}):");
+                        foreach (var field in type.fields)
+                        {
+                            if (keywords.Contains(field.Key))
+                            {
+                                sw.WriteLine(
+                                    $"    _{field.Key}: {fieldToString(field.Value)} = Field(alias='{field.Key}')");
+                            }
+                            else
+                                sw.WriteLine($"    {field.Key}: {fieldToString(field.Value)} = None");
+                        }
+
+                        if (classSuffix != null)
+                        {
+                            sw.WriteLine(classSuffix(type.name));
+                        }
+
+                        if (classSuffix == null && type.fields.Count == 0) sw.WriteLine("    pass");
+
                     }
-                    if (classSuffix == null && type.fields.Count == 0) sw.WriteLine("    pass");
 
                 }
+
+                File.WriteAllText(file, File.ReadAllText(file)
+                    .Replace("\r\n", "\n"));
 
             }
 
@@ -334,21 +360,25 @@ namespace PcrotoGen
                 from pydantic import Field
                 """,
                 x => x[..^12] + "Response", _ => "ResponseBase");
-
-            using var sw = new StreamWriter(File.OpenWrite("enums.py"));
-
-            sw.WriteLine("from enum import IntEnum");
-            sw.WriteLine();
-
-            foreach (var type in protocol.enums)
             {
-                sw.WriteLine($"class {type.name}(IntEnum):");
-                foreach (var constant in type.values)
-                {
-                    sw.WriteLine($"    {constant.Key} = {constant.Value}");
-                }
+                using var sw = new StreamWriter(File.OpenWrite("enums.py"));
+
+                sw.WriteLine("from enum import IntEnum");
                 sw.WriteLine();
+
+                foreach (var type in protocol.enums)
+                {
+                    sw.WriteLine($"class {type.name}(IntEnum):");
+                    foreach (var constant in type.values)
+                    {
+                        sw.WriteLine($"    {constant.Key} = {constant.Value}");
+                    }
+                    sw.WriteLine();
+                }
+
             }
+            File.WriteAllText("enums.py", File.ReadAllText("enums.py")
+                .Replace("\r\n", "\n"));
         }
     }
 }
